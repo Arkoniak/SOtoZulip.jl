@@ -52,5 +52,8 @@ try
 
     process_answers(answ, db)
 catch err
+    # This one is needed for telegram notification
     @error err
+    # This one goes to logs
+    throw(err)
 end
