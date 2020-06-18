@@ -15,6 +15,12 @@ function print_href(io, text, href)
     print(io, "[", text, "](", href, ")")
 end
 
+function print_unixtime(io, tm)
+    print(io, "**[")
+    print(io, Dates.format(Dates.unix2datetime(tm), "yyyy-mm-dd MM:HH:SS"))
+    print(io, "]**")
+end
+
 function process_post(x)
     html_body = @_ parsehtml(x.body) |> __.root |> matchFirst(sel"body", __)
     io = IOBuffer()
@@ -22,7 +28,8 @@ function process_post(x)
     print(io, " asks: ")
     print_href(io, x.title, x.link)
     print(io, "\n")
-    println(io, "**Score**: $(x.score)\t**Answers**: $(x.answer_count)\n")
+    print_unixtime(io, x.creation_date)
+    println(io, "\t**Score: $(x.score)\tAnswers: $(x.answer_count)**\n")
     @_ process_post_body(html_body, io) |> String(take!(__))
 end
 
@@ -98,7 +105,8 @@ function msg_answer(x)
     print(io, " ")
     print_href(io, "answered", "https://stackoverflow.com/a/$(x.answer_id)")
     print(io, ":\n")
-    println(io, "**Score**: $(x.score)\n")
+    print_unixtime(io, x.creation_date)
+    println(io, " **Score: $(x.score)**\n")
     return @_ process_post_body(html_body, io) |> String(take!(__))
 end
 

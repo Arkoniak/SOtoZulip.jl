@@ -35,3 +35,18 @@ Bot itself can be found in root directory, file `yasobot.jl`, so it can be run m
 ```sh
 julia --project=. yasobot.jl
 ```
+
+To run as a cron job (as a local user) you can create executable shell script (fix julia path if needed)
+
+```sh
+#!/bin/bash
+
+cd $HOME/ZulipBots/SOtoZulip/
+$HOME/.local/bin/julia --project=. yasobot.jl >> $HOME/logs/yasobot.log 2>&1
+```
+
+and in `crontab -e` install
+
+```sh
+0 * * * * $HOME/ZulipBots/SOtoZulip/yasobot.sh >> $HOME/logs/cron_yasobot.log 2>&1
+```
