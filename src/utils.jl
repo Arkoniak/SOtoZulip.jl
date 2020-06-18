@@ -17,7 +17,7 @@ end
 
 function print_unixtime(io, tm)
     print(io, "**[")
-    print(io, Dates.format(Dates.unix2datetime(tm), "yyyy-mm-dd MM:HH:SS"))
+    print(io, Dates.format(Dates.unix2datetime(tm), "dd u yyyy HH:MM:SS"))
     print(io, "]**")
 end
 
