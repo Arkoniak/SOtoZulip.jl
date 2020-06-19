@@ -33,13 +33,13 @@ function process_post(x)
     @_ process_post_body(html_body, io) |> String(take!(__))
 end
 
-function process_post_body(x::HTMLText, io)
+function process_post_body(x::HTMLText, io, list)
     print(io, x.text)
 
     return io
 end
 
-function process_post_body(x, io = IOBuffer())
+function process_post_body(x, io = IOBuffer(), list = "")
     if tag(x) == :pre
         # It should be large code block
         print(io, "```\n", nodeText(x), "```\n")
@@ -51,7 +51,15 @@ function process_post_body(x, io = IOBuffer())
         print(io, "[", nodeText(x), "](", x.attributes["href"], ")")
     elseif tag(x) == :p
         # Paragraph
-        foreach(y -> process_post_body(y, io), x.children)
+        @_ foreach(process_post_body(_, io, list), x.children)
+        print(io, "\n")
+    elseif tag(x) == :ul
+        @_ foreach(process_post_body(_, io, "ul"), x.children)
+        print(io, "\n")
+    elseif tag(x) == :li
+        # In the future, here should be if/else for different kinds of list (numbered, unnumbered, nested)
+        print(io, "+ ")
+        @_ foreach(process_post_body(_, io, ""), x.children)
         print(io, "\n")
     elseif tag(x) == :blockquote
         # Quote
@@ -59,9 +67,13 @@ function process_post_body(x, io = IOBuffer())
         # Bad thing is we are losing all formatting, but let's hope that it is not going to be an issue in most cases
         print(io, nodeText(x))
         print(io, "\n```\n")
+    elseif tag(x) == :strong
+        print(io, "**")
+        @_ foreach(process_post_body(_, io, list), x.children)
+        print(io, "**")
     else
         # Not much left to do
-        foreach(y -> process_post_body(y, io), x.children)
+        @_ foreach(process_post_body(_, io, list), x.children)
     end
 
     return io

@@ -154,3 +154,26 @@ function updanswer!(db, a)
     DBInterface.execute(stmt, (a.question_id, a.answer_id, a.is_accepted, md5hash(a.body), a.score, a.last_activity_date, ts))
 end
 
+invalidate_question(db, x::AbstractVector) = @_ foreach(invalidate_question(db, _), x)
+function invalidate_question(db, x)
+    query = """
+    UPDATE questions
+    SET bodyhash = ""
+    WHERE qid = ?
+    """
+
+    stmt = SQLite.Stmt(db, query)
+    DBInterface.execute(stmt, (x, ))
+end
+
+invalidate_answer(db, x::AbstractVector) = @_ foreach(invalidate_answer(db, _), x)
+function invalidate_answer(db, x)
+    query = """
+    UPDATE answers
+    SET bodyhash = ""
+    WHERE answerid = ?
+    """
+
+    stmt = SQLite.Stmt(db, query)
+    DBInterface.execute(stmt, (x, ))
+end

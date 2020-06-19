@@ -16,6 +16,7 @@ export ZulipClient, sendMessage
 export SOClient, searchtag, getquestions
 export show_query, getdb
 export process_questions, process_answers
+export invalidate_answer, invalidate_question
 
 include("zulipclient.jl")
 include("soclient.jl")
