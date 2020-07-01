@@ -93,11 +93,6 @@ function process_questions(qs, db; zulip = ZulipGlobal.client, to = "stackoverfl
                 @error "Get bad response from zulip server: $res"
             end
         else # status == "update"
-            @show zulip_msg, title
-            @show msg_id
-            @show to
-            @show type
-            @show zulip
             res = updateMessage(zulip, msg_id; to = to, type = type, content = zulip_msg, topic = title)
             if get(res, :result, "fail") == "success"
                 updquestion!(db, item)
