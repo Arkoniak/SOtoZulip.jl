@@ -65,11 +65,11 @@ function qstatus(db, q)
     return (status = status, msg_id = msg_id, title = title)
 end
 
-function aissame(x, row)
+function issame(x::Answer, row)
     return (row.bodyhash == md5hash(x.body)) & (row.isaccepted == Int(x.is_accepted)) & (row.score == x.score)
 end
 
-function astatus(db, a)
+function astatus(db, a::Answer)
     query = """
     SELECT a.qid, a.title, b.answerid, b.zuid, b.isaccepted, b.bodyhash, b.score
     FROM questions AS a
@@ -91,7 +91,7 @@ function astatus(db, a)
         title = row.title
         ismissing(row.answerid) && break
         msg_id = row.zuid
-        status = aissame(a, row) ? "known" : "update"
+        status = issame(a, row) ? "known" : "update"
     end
     
     return (status = status, msg_id = msg_id, title = title)
@@ -127,7 +127,7 @@ function updquestion!(db, q)
     DBInterface.execute(stmt, (q.question_id, q.score, q.answer_count, bytes2hex(md5(q.body)), q.is_answered, q.last_activity_date, ts))
 end
 
-function addanswer!(db, a, response)
+function add!(db, a::Answer, response)
     query = """
     INSERT INTO answers(qid, zuid, answerid, isaccepted, bodyhash, score, acreated, aactivity, created, updated) VALUES  (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
     """
@@ -137,7 +137,7 @@ function addanswer!(db, a, response)
     DBInterface.execute(stmt, (a.question_id, response.id, a.answer_id, a.is_accepted, md5hash(a.body), a.score, a.creation_date, a.last_activity_date, ts, ts))
 end
 
-function updanswer!(db, a)
+function update!(db, a::Answer)
     query = """
     UPDATE answers
     SET isaccepted = ?3,

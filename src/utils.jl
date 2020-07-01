@@ -93,6 +93,11 @@ function process_questions(qs, db; zulip = ZulipGlobal.client, to = "stackoverfl
                 @error "Get bad response from zulip server: $res"
             end
         else # status == "update"
+            @show zulip_msg, title
+            @show msg_id
+            @show to
+            @show type
+            @show zulip
             res = updateMessage(zulip, msg_id; to = to, type = type, content = zulip_msg, topic = title)
             if get(res, :result, "fail") == "success"
                 updquestion!(db, item)
@@ -106,8 +111,40 @@ end
 
 ##########################################
 # Answers
+struct Owner
+    display_name::String
+    link::String
+end
 
-function msg_answer(x)
+struct Answer
+    is_accepted::Bool
+    body::String
+    answer_id::Int
+    question_id::Int
+    creation_date::Int
+    last_activity_date::Int
+    score::Int
+    owner::Owner
+end
+function Answer(answer)
+    is_accepted = get(answer, :is_accepted, false)
+    body = get(answer, :body, "")
+    answer_id = get(answer, :answer_id, 0)
+    question_id = get(answer, :question_id, 0)
+    creation_date = get(answer, :creation_date, 0)
+    last_activity_date = get(answer, :last_activity_date, 0)
+    score = get(answer, :score, 0)
+    owner = Owner(get(answer, :owner, nothing))
+
+    Answer(is_accepted, body, answer_id, question_id, creation_date, last_activity_date, score, owner)
+end
+
+Owner(::Nothing) = Owner("Unknown", "")
+function Owner(owner)
+    return Owner(get(owner, :display_name, "Unknown"), get(owner, :link, ""))
+end
+
+function msg(x::Answer)
     html_body = @_ parsehtml(x.body) |> __.root |> matchFirst(sel"body", __)
     io = IOBuffer()
     if x.is_accepted
@@ -123,28 +160,28 @@ function msg_answer(x)
 end
 
 
-function process_answer(answer, db; zulip = ZulipGlobal.client, to = "stackoverflow", type = "stream")
+function process(answer::Answer, db; zulip = ZulipGlobal.client, to = "stackoverflow", type = "stream")
     status, msg_id, title = astatus(db, answer)
     if (isempty(title)) & (status != "new")
-       # This is some sort of error
-       # It should never happen
-       @error "Empty title for question: " * string(answer.question_id)
-       return nothing
-   end
-   status == "known" && return nothing
+        # This is some sort of error
+        # It should never happen
+        @error "Empty title for question: " * string(answer.question_id)
+        return nothing
+    end
+    status == "known" && return nothing
 
-    zulip_msg = msg_answer(answer)
+    zulip_msg = msg(answer)
     if status == "new"
         res = sendMessage(zulip; to = to, type = type, content = zulip_msg, topic = title)
         if get(res, :result, "fail") == "success"
-            addanswer!(db, answer, res)
+            add!(db, answer, res)
         else
             @error "Get bad response from zulip server: $res"
         end
     else # status == "update"
         res = updateMessage(zulip, msg_id; to = to, type = type, content = zulip_msg, topic = title)
         if get(res, :result, "fail") == "success"
-            updanswer!(db, answer)
+            update!(db, answer)
         else
             @error "Get bad response from zulip server: $res"
         end
@@ -154,8 +191,9 @@ end
 
 function process_answers(answers, db; zulip = ZulipGlobal.client, to = "stackoverflow", type = "stream")
     for x in answers
-        for answer in x.items
-            process_answer(answer, db, zulip = zulip, to = to, type = type)
+        for item in get(x, :items, [])
+            answer = Answer(item)
+            process(answer, db, zulip = zulip, to = to, type = type)
         end
     end
 end
