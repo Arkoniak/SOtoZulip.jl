@@ -41,7 +41,10 @@ end
 md5hash(text) = bytes2hex(md5(text))
 
 function qissame(q, row)
-    return (row.score == q.score) & (row.bodyhash == md5hash(q.body)) & (row.answers == q.answer_count) & (row.isanswered == Int(q.is_answered))
+    if isempty(get(q, :body, ""))
+        @info q
+    end
+    return (row.score == q.score) & (row.bodyhash == md5hash(get(q, :body, ""))) & (row.answers == q.answer_count) & (row.isanswered == Int(q.is_answered))
 end
 
 function qstatus(db, q)
