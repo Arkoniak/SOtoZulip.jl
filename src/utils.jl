@@ -86,11 +86,23 @@ function process_questions(qs, db; zulip = ZulipGlobal.client, to = "stackoverfl
 
         zulip_msg = process_post(item)
         if status == "new"
-            res = sendMessage(zulip; to = to, type = type, content = zulip_msg, topic = item.title)
-            if get(res, :result, "fail") == "success"
-                addquestion!(db, item, res)
-            else
-                @error "Get bad response from zulip server: $res"
+            try
+                if length(zulip_msg) > 10_000
+                    res = sendMessage(zulip; to = to, type = type, content = "Message is too long, please read it on stackoverflow.com", topic = item.title)
+                else
+                    res = sendMessage(zulip; to = to, type = type, content = zulip_msg, topic = item.title)
+                end
+                if get(res, :result, "fail") == "success"
+                    addquestion!(db, item, res)
+                else
+                    @error "Get bad response from zulip server: $res"
+                end
+            catch err
+                @info "Received error from the server"
+                @info zulip_msg
+                @info item.title
+                @info item
+                rethrow()
             end
         else # status == "update"
             res = updateMessage(zulip, msg_id; to = to, type = type, content = zulip_msg, topic = title)
