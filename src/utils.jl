@@ -21,7 +21,7 @@ function print_unixtime(io, tm)
     print(io, "]**")
 end
 
-function process_post(x)
+function process_post(x, body = nothing)
     html_body = @_ parsehtml(x.body) |> __.root |> matchFirst(sel"body", __)
     io = IOBuffer()
     print_href(io, x.owner.display_name, x.owner.link)
@@ -30,7 +30,12 @@ function process_post(x)
     print(io, "\n")
     print_unixtime(io, x.creation_date)
     println(io, "\t**Score: $(x.score)\tAnswers: $(x.answer_count)**\n")
-    @_ process_post_body(html_body, io) |> String(take!(__))
+    if isnothing(body)
+        return @_ process_post_body(html_body, io) |> String(take!(__))
+    else
+        print(io, body)
+        return String(take!(io))
+    end
 end
 
 function process_post_body(x::HTMLText, io, list)
@@ -85,13 +90,12 @@ function process_questions(qs, db; zulip = ZulipGlobal.client, to = "stackoverfl
         status == "known" && continue
 
         zulip_msg = process_post(item)
+        if length(zulip_msg) > 9900
+            zulip_msg = process_post(item, "Message is too long, please read it on [stackoverflow.com]($(item.link))")
+        end
         if status == "new"
             try
-                if length(zulip_msg) > 10_000
-                    res = sendMessage(zulip; to = to, type = type, content = "Message is too long, please read it on stackoverflow.com", topic = item.title)
-                else
-                    res = sendMessage(zulip; to = to, type = type, content = zulip_msg, topic = item.title)
-                end
+                res = sendMessage(zulip; to = to, type = type, content = zulip_msg, topic = item.title)
                 if get(res, :result, "fail") == "success"
                     addquestion!(db, item, res)
                 else
@@ -151,7 +155,7 @@ function Owner(owner)
     return Owner(get(owner, :display_name, "Unknown"), get(owner, :link, ""))
 end
 
-function msg(x::Answer)
+function msg(x::Answer, body = nothing)
     html_body = @_ parsehtml(x.body) |> __.root |> matchFirst(sel"body", __)
     io = IOBuffer()
     if x.is_accepted
@@ -163,7 +167,12 @@ function msg(x::Answer)
     print(io, ":\n")
     print_unixtime(io, x.creation_date)
     println(io, " **Score: $(x.score)**\n")
-    return @_ process_post_body(html_body, io) |> String(take!(__))
+    if isnothing(body)
+        return @_ process_post_body(html_body, io) |> String(take!(__))
+    else
+        print(io, body)
+        return String(take!(io))
+    end
 end
 
 
@@ -178,6 +187,9 @@ function process(answer::Answer, db; zulip = ZulipGlobal.client, to = "stackover
     status == "known" && return nothing
 
     zulip_msg = msg(answer)
+    if length(zulip_msg) > 9900
+        zulip_msg = msg(answer, "Message is too long, please read it on [stackoverflow.com](https://stackoverflow.com/a/$(answer.answer_id))")
+    end
     if status == "new"
         res = sendMessage(zulip; to = to, type = type, content = zulip_msg, topic = title)
         if get(res, :result, "fail") == "success"
