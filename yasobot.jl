@@ -19,7 +19,7 @@ try
     # Update and create fresh questions
     juliatag = searchtag(; order = "desc", sort = "creation", tagged = "julia", site = "stackoverflow", pagesize = 50)
     log_quota(juliatag.quota_remaining)
-    qids = @_ juliatag.items |> get.(__, "question_id")
+    qids = @_ juliatag.items |> filter("julia" in _.tags, __) |> get.(__, "question_id")
     questions = getquestions(qids; order = "desc", sort = "creation",
                              site = "stackoverflow", filter = "!9_bDDxJY5",
                              pagesize = 50)
@@ -37,7 +37,7 @@ try
     # Update active questions
     juliatag = searchtag(; order = "desc", sort = "activity", tagged = "julia", site = "stackoverflow", pagesize = 50)
     log_quota(juliatag.quota_remaining)
-    qids = @_ juliatag.items |> get.(__, "question_id")
+    qids = @_ juliatag.items |> filter("julia" in _.tags, __) |> get.(__, "question_id")
     questions = getquestions(qids; order = "desc", sort = "creation",
                              site = "stackoverflow", filter = "!9_bDDxJY5",
                              pagesize = 50)
