@@ -20,6 +20,14 @@ try
     juliatag = searchtag(; order = "desc", sort = "creation", tagged = "julia", site = "stackoverflow", pagesize = 50)
     log_quota(juliatag.quota_remaining)
     qids = @_ juliatag.items |> filter("julia" in _.tags, __) |> get.(__, "question_id")
+    if length(qids) == 50
+        # Something fishy is going on
+        open("/home/skoffer/logs/so_bot_juliatag.json", "w") do f
+            write(f, JSON3.write(juliatag))
+        end
+        @error "50 julia tags!"
+        throw("50 julia tags, stopping execution")
+    end
     questions = getquestions(qids; order = "desc", sort = "creation",
                              site = "stackoverflow", filter = "!9_bDDxJY5",
                              pagesize = 50)
@@ -38,6 +46,14 @@ try
     juliatag = searchtag(; order = "desc", sort = "activity", tagged = "julia", site = "stackoverflow", pagesize = 50)
     log_quota(juliatag.quota_remaining)
     qids = @_ juliatag.items |> filter("julia" in _.tags, __) |> get.(__, "question_id")
+    if length(qids) == 50
+        # Something fishy is going on
+        open("/home/skoffer/logs/so_bot_juliatag_update.json", "w") do f
+            write(f, JSON3.write(juliatag))
+        end
+        @error "50 julia tags!"
+        throw("50 julia tags, stopping execution")
+    end
     questions = getquestions(qids; order = "desc", sort = "creation",
                              site = "stackoverflow", filter = "!9_bDDxJY5",
                              pagesize = 50)
