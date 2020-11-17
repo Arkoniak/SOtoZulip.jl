@@ -5,6 +5,7 @@ const API_KEY = # Bot api key
 const ZULIP_EP = "https://julialang.zulipchat.com/"
 
 const SODB = "db/sodb.sqlite"
+const LOGS_DIR = "<path to logs>"
 
 const date_format = "yyyy-mm-dd HH:MM:SS"
 

@@ -1,11 +1,12 @@
 using Underscores
 using SOtoZulip
+using Dates
+using JSON3
 
 include("configuration.jl")
 
 const db = getdb(SODB)
-zulip = ZulipClient(email = EMAIL, apikey = API_KEY, ep = ZULIP_EP)
-soclient = SOClient()
+global_zulip!(email = EMAIL, apikey = API_KEY, ep = ZULIP_EP)
 
 function log_quota(quota)
     if quota >= 10
@@ -15,25 +16,25 @@ function log_quota(quota)
     end
 end
 
+hh = hour(Dates.now())
+
 try
     # Update and create fresh questions
     juliatag = searchtag(; order = "desc", sort = "creation", tagged = "julia", site = "stackoverflow", pagesize = 50)
     log_quota(juliatag.quota_remaining)
-    qids = @_ juliatag.items |> filter("julia" in _.tags, __) |> get.(__, "question_id")
-    if length(qids) == 50
-        # Something fishy is going on
-        open("/home/skoffer/logs/so_bot_juliatag.json", "w") do f
-            write(f, JSON3.write(juliatag))
-        end
-        @error "50 julia tags!"
-        throw("50 julia tags, stopping execution")
-    end
+    qids = get_qids(clean(juliatag))
     questions = getquestions(qids; order = "desc", sort = "creation",
                              site = "stackoverflow", filter = "!9_bDDxJY5",
                              pagesize = 50)
-
     log_quota(questions.quota_remaining)
-    process_questions(questions, db)
+
+    open(joinpath(LOGS_DIR, "so_bot_new_questions-$(hh).json"), "w") do f
+        write(f, JSON3.write(questions))
+    end
+
+    questions = clean(questions)
+    qids = get_qids(questions)
+    process_question.(reverse(questions), Ref(db))
 
     answ = SOtoZulip.getallqanswers(qids; order = "desc", sort = "creation",
                                  site = "stackoverflow", filter = "!9_bDE(fI5", 
@@ -45,21 +46,19 @@ try
     # Update active questions
     juliatag = searchtag(; order = "desc", sort = "activity", tagged = "julia", site = "stackoverflow", pagesize = 50)
     log_quota(juliatag.quota_remaining)
-    qids = @_ juliatag.items |> filter("julia" in _.tags, __) |> get.(__, "question_id")
-    if length(qids) == 50
-        # Something fishy is going on
-        open("/home/skoffer/logs/so_bot_juliatag_update.json", "w") do f
-            write(f, JSON3.write(juliatag))
-        end
-        @error "50 julia tags!"
-        throw("50 julia tags, stopping execution")
-    end
+    qids = get_qids(clean(juliatag))
     questions = getquestions(qids; order = "desc", sort = "creation",
                              site = "stackoverflow", filter = "!9_bDDxJY5",
                              pagesize = 50)
-
     log_quota(questions.quota_remaining)
-    process_questions(questions, db)
+
+    open(joinpath(LOGS_DIR, "so_bot_active_questions-$(hh).json"), "w") do f
+        write(f, JSON3.write(questions))
+    end
+    questions = clean(questions)
+    qids = get_qids(questions)
+
+    process_question.(reverse(questions), Ref(db))
 
     answ = SOtoZulip.getallqanswers(qids; order = "desc", sort = "creation",
                                  site = "stackoverflow", filter = "!9_bDE(fI5", 
@@ -69,7 +68,7 @@ try
     process_answers(answ, db)
 catch err
     # This one is needed for telegram notification
-    @error err
+    @error "Exception during data processing" exception=(err, catch_backtrace())
     # This one goes to logs
     throw(err)
 end

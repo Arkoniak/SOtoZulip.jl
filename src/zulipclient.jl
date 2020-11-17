@@ -3,14 +3,9 @@ struct ZulipClient
     headers::Vector{Pair{String, String}}
 end
 
-mutable struct ZulipOpts
-    client::ZulipClient
-end
+const ZulipGlobal = Ref(ZulipClient("", []))
 
-const ZulipGlobal = ZulipOpts(ZulipClient("", []))
-
-
-function ZulipClient(; email = "", apikey = "", ep = "https://julialang.zulipchat.com", api_version = "v1", use_globally = true)
+function ZulipClient(; email = "", apikey = "", ep = "https://julialang.zulipchat.com", api_version = "v1")
     if isempty(email) || isempty(apikey)
         throw(ArgumentError("Arguments email and apikey should not be empty."))
     end
@@ -20,11 +15,13 @@ function ZulipClient(; email = "", apikey = "", ep = "https://julialang.zulipcha
     endpoint = ep * "/api/" * api_version * "/"
 
     client = ZulipClient(endpoint, headers)
-    if use_globally
-        ZulipGlobal.client = client
-    end
 
     return client
+end
+
+function global_zulip!(; email = "", apikey = "", ep = "https://julialang.zulipchat.com", api_version = "v1")
+    client = ZulipClient(; email = email, apikey = apikey, ep = ep, api_version = api_version)
+    ZulipGlobal[] = client
 end
 
 function query(client::ZulipClient, apimethod, params; method = "POST")
@@ -33,11 +30,16 @@ function query(client::ZulipClient, apimethod, params; method = "POST")
     JSON3.read(HTTP.request(method, url, client.headers, params).body)
 end
 
-function sendMessage(client::ZulipClient = ZulipGlobal.client; params...)
+function sendMessage(client::ZulipClient = ZulipGlobal[]; params...)
     query(client, "messages", Dict(params))
 end
 
-updateMessage(msg_id; params...) = updateMessage(ZulipGlobal.client, msg_id; params...)
+updateMessage(msg_id; params...) = updateMessage(ZulipGlobal[], msg_id; params...)
 function updateMessage(client::ZulipClient, msg_id; params...)
     query(client, "messages/" * string(msg_id), Dict(params), method = "PATCH")
+end
+
+deleteMessage(msg_id; params...) = deleteMessage(ZulipGlobal[], msg_id; params...)
+function deleteMessage(client::ZulipClient, msg_id; params...)
+    query(client, "messages/" * string(msg_id), Dict(params), method = "DELETE")
 end

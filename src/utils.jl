@@ -1,6 +1,8 @@
 # DB related
 
 getdb(dbname) = SQLite.DB(dbname)
+get_qids(v) = @_ map(_.question_id, v)
+clean(questions) = @_ filter("julia" in _.tags, questions.items) |> filter(_.question_id > 0, __)
 
 function show_query(db, query; params = (), n = 1)
     stmt = SQLite.Stmt(db, query)
@@ -24,8 +26,8 @@ end
 function process_post(x, body = nothing)
     html_body = @_ parsehtml(x.body) |> __.root |> matchFirst(sel"body", __)
     io = IOBuffer()
-    ownername = get(x.owner, :display_name, "Unknown")
-    ownerlink = get(x.owner, :link, "")
+    ownername = x.owner.display_name
+    ownerlink = x.owner.link
     print_href(io, ownername, ownerlink)
     print(io, " asks: ")
     print_href(io, x.title, x.link)
@@ -86,76 +88,42 @@ function process_post_body(x, io = IOBuffer(), list = "")
     return io
 end
 
-function process_questions(qs, db; zulip = ZulipGlobal.client, to = "stackoverflow", type = "stream")
-    for item in reverse(qs.items)
-        status, msg_id, title = qstatus(db, item)
-        status == "known" && continue
+function process_question(item, db; zulip = ZulipGlobal[], to = "stackoverflow", type = "stream")
+    status, msg_id, title = qstatus(db, item)
+    status == "known" && return
 
-        zulip_msg = process_post(item)
-        if length(zulip_msg) > 9900
-            zulip_msg = process_post(item, "Message is too long, please read it on [stackoverflow.com]($(item.link))")
-        end
-        if status == "new"
-            try
-                res = sendMessage(zulip; to = to, type = type, content = zulip_msg, topic = item.title)
-                if get(res, :result, "fail") == "success"
-                    addquestion!(db, item, res)
-                else
-                    @error "Get bad response from zulip server: $res"
-                end
-            catch err
-                @info "Received error from the server"
-                @info zulip_msg
-                @info item.title
-                @info item
-                rethrow()
-            end
-        else # status == "update"
-            res = updateMessage(zulip, msg_id; to = to, type = type, content = zulip_msg, topic = title)
+    zulip_msg = process_post(item)
+    if length(zulip_msg) > 9900
+        zulip_msg = process_post(item, "Message is too long, please read it on [stackoverflow.com]($(item.link))")
+    end
+    if status == "new"
+        try
+            res = sendMessage(zulip; to = to, type = type, content = zulip_msg, topic = item.title)
             if get(res, :result, "fail") == "success"
-                updquestion!(db, item)
+                addquestion!(db, item, res)
             else
                 @error "Get bad response from zulip server: $res"
             end
+        catch err
+            @info "Received error from the server"
+            @info zulip_msg
+            @info item.title
+            @info item
+            rethrow()
         end
-        @info "Processed question $(item.question_id)"
+    else # status == "update"
+        res = updateMessage(zulip, msg_id; to = to, type = type, content = zulip_msg, topic = title)
+        if get(res, :result, "fail") == "success"
+            updquestion!(db, item)
+        else
+            @error "Get bad response from zulip server: $res"
+        end
     end
+    @info "Processed question $(item.question_id)"
 end
 
 ##########################################
 # Answers
-struct Owner
-    display_name::String
-    link::String
-end
-
-struct Answer
-    is_accepted::Bool
-    body::String
-    answer_id::Int
-    question_id::Int
-    creation_date::Int
-    last_activity_date::Int
-    score::Int
-    owner::Owner
-end
-function Answer(answer)
-    is_accepted = get(answer, :is_accepted, false)
-    body = get(answer, :body, "")
-    answer_id = get(answer, :answer_id, 0)
-    question_id = get(answer, :question_id, 0)
-    creation_date = get(answer, :creation_date, 0)
-    last_activity_date = get(answer, :last_activity_date, 0)
-    score = get(answer, :score, 0)
-    owner = Owner(get(answer, :owner, nothing))
-
-    Answer(is_accepted, body, answer_id, question_id, creation_date, last_activity_date, score, owner)
-end
-
-Owner(::Nothing) = Owner("Unknown", "")
-function Owner(owner)
-    return Owner(get(owner, :display_name, "Unknown"), get(owner, :link, ""))
-end
 
 function msg(x::Answer, body = nothing)
     html_body = @_ parsehtml(x.body) |> __.root |> matchFirst(sel"body", __)
@@ -178,12 +146,12 @@ function msg(x::Answer, body = nothing)
 end
 
 
-function process(answer::Answer, db; zulip = ZulipGlobal.client, to = "stackoverflow", type = "stream")
+function process(answer::Answer, db; zulip = ZulipGlobal[], to = "stackoverflow", type = "stream")
     status, msg_id, title = astatus(db, answer)
     if (isempty(title)) & (status != "new")
         # This is some sort of error
         # It should never happen
-        @error "Empty title for question: " * string(answer.question_id)
+        @error "Empty title of the question: " * string(answer.question_id)
         return nothing
     end
     status == "known" && return nothing
@@ -210,11 +178,49 @@ function process(answer::Answer, db; zulip = ZulipGlobal.client, to = "stackover
     @info "Processed answer_id $(answer.answer_id)"
 end
 
-function process_answers(answers, db; zulip = ZulipGlobal.client, to = "stackoverflow", type = "stream")
+function process_answers(answers, db; zulip = ZulipGlobal[], to = "stackoverflow", type = "stream")
     for x in answers
-        for item in get(x, :items, [])
-            answer = Answer(item)
+        for answer in x.items
             process(answer, db, zulip = zulip, to = to, type = type)
+        end
+    end
+end
+
+########################################
+# Cleanup section
+########################################
+
+function remove_question(db, qid; zulip = ZulipGlobal[])
+    msgid = get_question(db, qid)
+    answids = get_answers(db, qid)
+    if isempty(msgid)
+        @info "Question $qid is not found"
+        return
+    end
+    msgid = msgid[1]
+    try
+        deleteMessage(zulip, msgid)
+    catch err
+        @error err
+    end
+    for answid in answids
+        try
+            deleteMessage(zulip, answid)
+        catch err
+            @error err
+        end
+    end
+    drop_question!(db, qid)
+end
+
+function prune_questions(db, qs; zulip = ZulipGlobal[], tagword = "julia")
+    qids = @_ map(_.qid, qs)
+    soqs = getquestions(qids; site = "stackoverflow", pagesize = length(qids))
+    allowed = @_ filter(tagword in _.tags, soqs.items) |> map(_.question_id, __)
+    for q in qs
+        if !(q.qid in allowed)
+            @info "Removing question '$(q.title)'"
+            remove_question(db, q.qid, zulip = zulip)
         end
     end
 end

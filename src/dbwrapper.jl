@@ -41,10 +41,10 @@ end
 md5hash(text) = bytes2hex(md5(text))
 
 function qissame(q, row)
-    if isempty(get(q, :body, ""))
+    if isempty(q.body)
         @info q
     end
-    return (row.score == q.score) & (row.bodyhash == md5hash(get(q, :body, ""))) & (row.answers == q.answer_count) & (row.isanswered == Int(q.is_answered))
+    return (row.score == q.score) & (row.bodyhash == md5hash(q.body)) & (row.answers == q.answer_count) & (row.isanswered == Int(q.is_answered))
 end
 
 function qstatus(db, q)
@@ -66,6 +66,47 @@ function qstatus(db, q)
     end
     
     return (status = status, msg_id = msg_id, title = title)
+end
+
+function get_questions(db)
+    query = """
+    SELECT qid, zuid, title
+    FROM questions
+    WHERE deleted = 0
+    """
+
+    stmt = SQLite.Stmt(db, query)
+    res = DBInterface.execute(stmt)
+    res = @_ map((; qid = _.qid, zuid = _.zuid, title = _.title), res)
+    return res
+end
+
+function get_question(db, qid)
+    query = """
+    SELECT zuid
+    FROM questions
+    WHERE qid = ?
+    """
+
+    stmt = SQLite.Stmt(db, query)
+    res = @_ map(_.zuid, DBInterface.execute(stmt, (qid, )))
+    return res
+end
+
+function get_answers(db, qid, with_deleted = false)
+    query = """
+    SELECT zuid
+    FROM answers
+    WHERE qid = ?
+    """
+    if !with_deleted
+       query *= " AND deleted = 0" 
+    end
+
+    stmt = SQLite.Stmt(db, query)
+    res = @_ map(_.zuid, DBInterface.execute(stmt, (qid, )))
+    
+    return res
 end
 
 function issame(x::Answer, row)
@@ -179,4 +220,30 @@ function invalidate_answer(db, x)
 
     stmt = SQLite.Stmt(db, query)
     DBInterface.execute(stmt, (x, ))
+end
+
+function drop_question!(db, qid)
+    queries = ["""
+    UPDATE questions
+    SET deleted = 1, updated = ?
+    WHERE qid = ?
+    """,
+    """
+    UPDATE answers
+    SET deleted = 1, updated = ?
+    WHERE qid = ?
+    """
+    ]
+
+    ts = currentts()
+    DBInterface.execute(db, "BEGIN TRANSACTION")
+    try
+        for query in queries
+            stmt = SQLite.Stmt(db, query)
+            DBInterface.execute(stmt, (ts, qid))
+        end
+        DBInterface.execute(db, "COMMIT")
+    catch
+        DBInterface.execute(db, "ROLLBACK")
+    end
 end
