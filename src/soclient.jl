@@ -1,3 +1,15 @@
+function tryretry(f, retries)
+    for i in 1:retries - 1
+        try
+           return f()
+        catch
+            @info "Left $(retries - i) trials"
+        end
+    end
+
+    f()
+end
+
 struct SOError{T} <: Exception
     msg::T
 end
@@ -101,35 +113,45 @@ function searchtag(client::SOClient = SOGlobal[]; params...)
     return process_response(response, SOResponse{TagQuestionId})
 end
 
-getquestions(qids; params...) = getquestions(SOGlobal[], qids; params...)
-function getquestions(client::SOClient, qids; params...)
+getquestions(qids, retries = 5; params...) = getquestions(SOGlobal[], qids, retries; params...)
+function getquestions(client::SOClient, qids, retries; params...)
     url = client.ep * "questions/"
     qids = join(qids, ";") |> HTTP.URIs.escapeuri
     params = Dict(params) |> HTTP.URIs.escapeuri
 
-    response = HTTP.get(url * qids * "?" * params)
-
-    return process_response(response, SOResponse{Question})
+    uri = url * qids * "?" * params
+    println("============================================")
+    println(uri)
+    println("============================================")
+    tryretry(retries) do
+        response = HTTP.get(uri)
+        process_response(response, SOResponse{Question})
+    end
 end
 
-getqanswers(qids; params...) = getqanswers(SOGlobal[], qids; params...)
-function getqanswers(client::SOClient, qids; params...)
+function getqanswers(client::SOClient, qids, retries; params...)
     url = client.ep * "questions/"
     qids = join(qids, ";") |> HTTP.URIs.escapeuri
     params = Dict(params) |> HTTP.URIs.escapeuri
 
-    response = HTTP.get(url * qids * "/answers?" * params)
-    
-    return process_response(response, SOResponse{Answer})
+    uri = url * qids * "/answers?" * params
+    println("============================================")
+    println(uri)
+    println("============================================")
+
+    tryretry(retries) do
+        response = HTTP.get(uri)
+        process_response(response, SOResponse{Answer})
+    end
 end
 
-getallqanswers(qids; params...) = getallqanswers(SOGlobal[], qids; params...)
-function getallqanswers(client::SOClient, qids; params...)
+getallqanswers(qids, retries = 5; params...) = getallqanswers(SOGlobal[], qids, retries; params...)
+function getallqanswers(client::SOClient, qids, retries; params...)
     answers = []
     hasmore = true
     page = 1
     while hasmore
-        res = getqanswers(client, qids; page = page, params...)
+        res = getqanswers(client, qids, retries; page = page, params...)
         push!(answers, res)
         page += 1
         hasmore = res.has_more

@@ -1,7 +1,7 @@
 using SOtoZulip
 using DBInterface
 
-include("configuration.jl")
+include("../configuration.jl")
 
 db = getdb(SODB)
 

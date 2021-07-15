@@ -7,6 +7,7 @@ include("configuration.jl")
 
 const db = getdb(SODB)
 global_zulip!(email = EMAIL, apikey = API_KEY, ep = ZULIP_EP)
+SOtoZulip.SOGlobal[] = SOtoZulip.SOClient(api_version = "2.3")
 
 function log_quota(quota)
     if quota >= 10
@@ -16,7 +17,7 @@ function log_quota(quota)
     end
 end
 
-hh = hour(Dates.now())
+const hh = hour(Dates.now())
 
 try
     # Update and create fresh questions
@@ -68,7 +69,7 @@ try
     process_answers(answ, db)
 catch err
     # This one is needed for telegram notification
-    @error "Exception during data processing" exception=(err, catch_backtrace())
+    @error "SOtoZulipBOT: Exception during data processing" exception=(err, catch_backtrace())
     # This one goes to logs
     throw(err)
 end
