@@ -5,6 +5,7 @@ function tryretry(f, retries)
         catch
             @info "Left $(retries - i) trials"
         end
+        sleep(rand(1:10))
     end
 
     f()
